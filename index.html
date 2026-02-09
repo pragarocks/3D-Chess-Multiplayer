@@ -513,4 +513,113 @@
                 new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
             );
             mesh.rotation.x = -Math.PI/2;
-            mesh.position.set((f-3.5)*SQUARE_SIZE, 0.1
+            mesh.position.set((f-3.5)*SQUARE_SIZE, 0.1, ((8-r)-3.5)*SQUARE_SIZE);
+            highlightGroup.add(mesh);
+        }
+
+        function deselect() {
+            selectedSquare = null;
+            highlightGroup.clear();
+        }
+
+        function attemptMove(from, to) {
+            const move = validMoves.find(m => m.to === to);
+            if(move) {
+                chess.move({ from, to, promotion: 'q' });
+                if(move.captured) spawnExplosion(to);
+                
+                update3DBoard();
+                deselect();
+                updateGameStatus();
+                
+                // Send Move to Peer
+                if(conn) {
+                    conn.send({ type: 'move', from, to });
+                }
+            }
+        }
+
+        function spawnExplosion(sq) {
+            const f = sq.charCodeAt(0) - 97;
+            const r = parseInt(sq[1]);
+            const x = (f - 3.5) * SQUARE_SIZE;
+            const z = ((8 - r) - 3.5) * SQUARE_SIZE;
+            
+            for(let i=0; i<15; i++) {
+                const p = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.5,0.5,0.5),
+                    new THREE.MeshBasicMaterial({ color: 0xff5500 })
+                );
+                p.position.set(x, 2, z);
+                p.userData = { vel: new THREE.Vector3((Math.random()-0.5), Math.random(), (Math.random()-0.5)), life: 1 };
+                scene.add(p);
+                particles.push(p);
+            }
+        }
+
+        function updateGameStatus() {
+            const turn = chess.turn();
+            const text = document.getElementById('status-text');
+            const indW = document.getElementById('indicator-w');
+            const indB = document.getElementById('indicator-b');
+
+            if(chess.game_over()) {
+                text.innerText = "GAME OVER";
+                text.style.color = "#ef4444";
+                return;
+            }
+
+            if(turn === 'w') {
+                text.innerText = "White's Turn";
+                indW.classList.add('turn-active');
+                indB.classList.remove('turn-active');
+            } else {
+                text.innerText = "Black's Turn";
+                indW.classList.remove('turn-active');
+                indB.classList.add('turn-active');
+            }
+            
+            // Highlight check
+            if(chess.in_check()) text.innerText += " (CHECK)";
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            
+            // Particles
+            for(let i=particles.length-1; i>=0; i--) {
+                const p = particles[i];
+                p.position.add(p.userData.vel);
+                p.userData.vel.y -= 0.03;
+                p.rotation.x += 0.1;
+                p.userData.life -= 0.02;
+                if(p.userData.life <= 0 || p.position.y < -5) {
+                    scene.remove(p);
+                    particles.splice(i,1);
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth/window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Global Helpers
+        window.copyToClipboard = function(text) {
+            navigator.clipboard.writeText(text);
+            const t = document.getElementById('toast');
+            t.style.opacity = 1;
+            setTimeout(() => t.style.opacity = 0, 2000);
+        }
+
+        // Start
+        init3D();
+
+    </script>
+</body>
+</html>
